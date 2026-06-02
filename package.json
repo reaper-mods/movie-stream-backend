@@ -1,0 +1,37 @@
+{
+  "name": "movie-stream-backend",
+  "version": "1.0.0",
+  "description": "High-security movie streaming backend",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "nodemon src/app.js",
+    "prisma:generate": "prisma generate",
+    "prisma:push": "prisma db push",
+    "vercel-build": "prisma generate && prisma db push"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.10.0",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.1",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "helmet": "^7.1.0",
+    "hpp": "^0.2.3",
+    "jsonwebtoken": "^9.0.2",
+    "express-mongo-sanitize": "^2.2.0",
+    "express-validator": "^7.0.1",
+    "morgan": "^1.10.0",
+    "xss-clean": "^0.1.4",
+    "cookie-parser": "^1.4.6",
+    "compression": "^1.7.4",
+    "express-useragent": "^1.0.15",
+    "node-cache": "^5.1.2",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.3",
+    "prisma": "^5.10.0"
+  }
+}

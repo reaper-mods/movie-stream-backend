@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  password      String
+  name          String?
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  lastLogin     DateTime?
+  loginAttempts Int            @default(0)
+  lockedUntil   DateTime?
+  watchHistory  WatchHistory[]
+  userSessions  UserSession[]
+}
+
+model UserSession {
+  id           String   @id @default(uuid())
+  userId       String
+  token        String   @unique
+  userAgent    String?
+  ipAddress    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Admin {
+  id            String   @id @default(uuid())
+  username      String   @unique
+  password      String
+  email         String   @unique
+  role          String   @default("admin")
+  lastLogin     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  movies        Movie[]
+}
+
+model Movie {
+  id            String         @id @default(uuid())
+  title         String
+  description   String
+  thumbnailUrl  String
+  videoUrl      String
+  duration      Int?
+  releaseYear   Int?
+  genre         String[]
+  rating        Float?
+  isActive      Boolean        @default(true)
+  featured      Boolean        @default(false)
+  viewCount     Int            @default(0)
+  addedById     String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  watchHistory  WatchHistory[]
+  addedBy       Admin          @relation(fields: [addedById], references: [id])
+}
+
+model WatchHistory {
+  id        String   @id @default(uuid())
+  userId    String
+  movieId   String
+  watchedAt DateTime @default(now())
+  progress  Float    @default(0)
+  completed Boolean  @default(false)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  movie     Movie    @relation(fields: [movieId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, movieId])
+}
+
+model ApiKey {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
