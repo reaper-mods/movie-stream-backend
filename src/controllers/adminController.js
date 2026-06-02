@@ -27,7 +27,6 @@ class AdminController {
         });
       }
 
-      // Update last login
       await prisma.admin.update({
         where: { id: admin.id },
         data: { lastLogin: new Date() }
@@ -68,7 +67,6 @@ class AdminController {
         activeUsers,
         totalViews,
         recentMovies,
-        popularMovies,
       ] = await Promise.all([
         prisma.movie.count(),
         prisma.user.count(),
@@ -84,15 +82,6 @@ class AdminController {
             createdAt: true,
           }
         }),
-        prisma.movie.findMany({
-          take: 5,
-          orderBy: { viewCount: 'desc' },
-          select: {
-            id: true,
-            title: true,
-            viewCount: true,
-          }
-        }),
       ]);
 
       return res.json({
@@ -105,7 +94,6 @@ class AdminController {
             totalViews: totalViews._sum.viewCount || 0,
           },
           recentMovies,
-          popularMovies,
         }
       });
 
@@ -114,6 +102,41 @@ class AdminController {
       return res.status(500).json({
         success: false,
         message: 'Failed to fetch dashboard data'
+      });
+    }
+  }
+
+  static async getMovies(req, res) {
+    try {
+      const { page = 1, limit = 50 } = req.query;
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+
+      const [movies, total] = await Promise.all([
+        prisma.movie.findMany({
+          skip,
+          take: parseInt(limit),
+          orderBy: { createdAt: 'desc' },
+        }),
+        prisma.movie.count(),
+      ]);
+
+      return res.json({
+        success: true,
+        data: {
+          movies,
+          pagination: {
+            currentPage: parseInt(page),
+            totalPages: Math.ceil(total / parseInt(limit)),
+            totalMovies: total,
+          }
+        }
+      });
+
+    } catch (error) {
+      console.error('Get movies error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch movies'
       });
     }
   }
@@ -132,32 +155,22 @@ class AdminController {
         featured,
       } = req.body;
 
-      // Validate required fields
       if (!title || !description || !thumbnailUrl || !videoUrl) {
         return res.status(400).json({
           success: false,
-          message: 'Missing required fields'
-        });
-      }
-
-      // Validate URLs
-      const urlPattern = /^https?:\/\/.+/;
-      if (!urlPattern.test(thumbnailUrl) || !urlPattern.test(videoUrl)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid URL format'
+          message: 'Title, description, thumbnail URL, and video URL are required'
         });
       }
 
       const movie = await prisma.movie.create({
         data: {
-          title: Encryption.sanitizeInput(title),
-          description: Encryption.sanitizeInput(description),
+          title,
+          description,
           thumbnailUrl,
           videoUrl,
           duration: parseInt(duration) || null,
           releaseYear: parseInt(releaseYear) || null,
-          genre: Array.isArray(genre) ? genre : [genre],
+          genre: Array.isArray(genre) ? genre : genre ? [genre] : [],
           rating: parseFloat(rating) || null,
           featured: featured === 'true' || featured === true,
           addedById: req.admin.id,
@@ -182,15 +195,9 @@ class AdminController {
   static async updateMovie(req, res) {
     try {
       const { id } = req.params;
-      const updateData = req.body;
-
-      // Sanitize text fields
-      if (updateData.title) updateData.title = Encryption.sanitizeInput(updateData.title);
-      if (updateData.description) updateData.description = Encryption.sanitizeInput(updateData.description);
-
       const movie = await prisma.movie.update({
         where: { id },
-        data: updateData,
+        data: req.body,
       });
 
       return res.json({
@@ -212,15 +219,13 @@ class AdminController {
     try {
       const { id } = req.params;
 
-      // Soft delete - just deactivate
-      await prisma.movie.update({
-        where: { id },
-        data: { isActive: false }
+      await prisma.movie.delete({
+        where: { id }
       });
 
       return res.json({
         success: true,
-        message: 'Movie deactivated successfully'
+        message: 'Movie deleted successfully'
       });
 
     } catch (error) {
@@ -234,20 +239,11 @@ class AdminController {
 
   static async getUsers(req, res) {
     try {
-      const { page = 1, limit = 20, search } = req.query;
+      const { page = 1, limit = 50 } = req.query;
       const skip = (parseInt(page) - 1) * parseInt(limit);
-
-      const where = {};
-      if (search) {
-        where.OR = [
-          { email: { contains: search, mode: 'insensitive' } },
-          { name: { contains: search, mode: 'insensitive' } },
-        ];
-      }
 
       const [users, total] = await Promise.all([
         prisma.user.findMany({
-          where,
           skip,
           take: parseInt(limit),
           orderBy: { createdAt: 'desc' },
@@ -263,7 +259,7 @@ class AdminController {
             }
           }
         }),
-        prisma.user.count({ where }),
+        prisma.user.count(),
       ]);
 
       return res.json({
@@ -283,56 +279,6 @@ class AdminController {
       return res.status(500).json({
         success: false,
         message: 'Failed to fetch users'
-      });
-    }
-  }
-
-  static async createAdmin(req, res) {
-    try {
-      const { username, email, password } = req.body;
-
-      // Check if admin exists
-      const existingAdmin = await prisma.admin.findFirst({
-        where: {
-          OR: [
-            { username },
-            { email: email.toLowerCase() }
-          ]
-        }
-      });
-
-      if (existingAdmin) {
-        return res.status(400).json({
-          success: false,
-          message: 'Admin with this username or email already exists'
-        });
-      }
-
-      const hashedPassword = await Encryption.hashPassword(password);
-
-      const admin = await prisma.admin.create({
-        data: {
-          username,
-          email: email.toLowerCase(),
-          password: hashedPassword,
-        }
-      });
-
-      return res.status(201).json({
-        success: true,
-        data: {
-          id: admin.id,
-          username: admin.username,
-          email: admin.email,
-        },
-        message: 'Admin created successfully'
-      });
-
-    } catch (error) {
-      console.error('Create admin error:', error);
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to create admin'
       });
     }
   }
