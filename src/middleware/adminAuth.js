@@ -1,6 +1,5 @@
 const JWTHelper = require('../utils/jwtHelper');
 const prisma = require('../config/database');
-const Encryption = require('../utils/encryption');
 
 const authenticateAdmin = async (req, res, next) => {
   try {
@@ -17,7 +16,7 @@ const authenticateAdmin = async (req, res, next) => {
     if (!decoded || !decoded.adminId) {
       return res.status(401).json({ 
         success: false, 
-        message: 'Invalid admin token' 
+        message: 'Invalid or expired token' 
       });
     }
 
@@ -35,7 +34,7 @@ const authenticateAdmin = async (req, res, next) => {
     req.admin = admin;
     next();
   } catch (error) {
-    console.error('Admin auth middleware error:', error);
+    console.error('Admin auth error:', error);
     return res.status(500).json({ 
       success: false, 
       message: 'Authentication error' 
@@ -43,24 +42,4 @@ const authenticateAdmin = async (req, res, next) => {
   }
 };
 
-const requireAdminRole = (roles) => {
-  return (req, res, next) => {
-    if (!req.admin) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Not authenticated' 
-      });
-    }
-
-    if (!roles.includes(req.admin.role)) {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Insufficient permissions' 
-      });
-    }
-
-    next();
-  };
-};
-
-module.exports = { authenticateAdmin, requireAdminRole };
+module.exports = { authenticateAdmin };
