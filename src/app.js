@@ -4,36 +4,19 @@ const cors = require('cors');
 const morgan = require('morgan');
 const cookieParser = require('cookie-parser');
 const compression = require('compression');
-const config = require('./config/environment');
-const security = require('./middleware/security');
-
-// Import routes
-const authRoutes = require('./routes/auth');
-const movieRoutes = require('./routes/movies');
-const adminRoutes = require('./routes/admin');
-const userRoutes = require('./routes/user');
 
 // Initialize express app
 const app = express();
 
-// Trust proxy for rate limiting behind reverse proxy (Vercel)
+// Trust proxy
 app.set('trust proxy', 1);
 
-// Security middleware
-app.use(security.securityHeaders);
-app.use(security.mongoSanitize);
-app.use(security.xssPrevention);
-app.use(security.hppProtection);
-app.use(security.sqlInjectionPrevention);
-app.use(security.suspiciousActivityLogger);
-app.use(security.requestSizeLimiter);
-
-// CORS configuration
+// CORS
 app.use(cors({
-  origin: config.cors.origin,
+  origin: process.env.ALLOWED_ORIGINS?.split(',') || ['*'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
 }));
 
 // Standard middleware
@@ -42,6 +25,21 @@ app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
+
+// Import security middleware
+const security = require('./middleware/security');
+
+// Security middleware
+app.use(security.securityHeaders);
+app.use(security.xssPrevention);
+app.use(security.hppProtection);
+app.use(security.requestSizeLimiter);
+
+// Import routes
+const authRoutes = require('./routes/auth');
+const movieRoutes = require('./routes/movies');
+const adminRoutes = require('./routes/admin');
+const userRoutes = require('./routes/user');
 
 // Rate limiting
 app.use('/api/', security.generalLimiter);
@@ -52,11 +50,10 @@ app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'healthy', 
     timestamp: new Date().toISOString(),
-    environment: config.nodeEnv 
+    environment: process.env.NODE_ENV || 'development'
   });
 });
 
-// Test route to verify API is working
 app.get('/api/test', (req, res) => {
   res.json({
     success: true,
@@ -76,7 +73,7 @@ app.use('/api/movies', movieRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/user', userRoutes);
 
-// Admin panel route (raw HTML login page)
+// Admin panel
 app.get('/admin', (req, res) => {
   res.send(`
     <!DOCTYPE html>
@@ -144,9 +141,7 @@ app.get('/admin', (req, res) => {
                 cursor: pointer;
                 transition: opacity 0.3s;
             }
-            button:hover {
-                opacity: 0.9;
-            }
+            button:hover { opacity: 0.9; }
             .error {
                 color: #ff4444;
                 text-align: center;
@@ -166,8 +161,8 @@ app.get('/admin', (req, res) => {
             <h1>🎬 MovieStream</h1>
             <p class="subtitle">Admin Panel</p>
             <form id="loginForm">
-                <input type="text" id="username" placeholder="Username" required autocomplete="username">
-                <input type="password" id="password" placeholder="Password" required autocomplete="current-password">
+                <input type="text" id="username" placeholder="Username" required>
+                <input type="password" id="password" placeholder="Password" required>
                 <button type="submit">Login</button>
                 <div class="error" id="errorMessage"></div>
                 <div class="success" id="successMessage"></div>
@@ -176,39 +171,23 @@ app.get('/admin', (req, res) => {
         <script>
             document.getElementById('loginForm').addEventListener('submit', async (e) => {
                 e.preventDefault();
-                
                 const username = document.getElementById('username').value;
                 const password = document.getElementById('password').value;
                 const errorDiv = document.getElementById('errorMessage');
                 const successDiv = document.getElementById('successMessage');
-                
                 errorDiv.style.display = 'none';
                 successDiv.style.display = 'none';
-                
                 try {
                     const response = await fetch('/api/admin/login', {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ username, password }),
                     });
-                    
                     const data = await response.json();
-                    
                     if (data.success) {
                         successDiv.style.display = 'block';
-                        successDiv.textContent = 'Login successful! Token: ' + data.data.token.substring(0, 20) + '...';
-                        
-                        // Store token
+                        successDiv.textContent = 'Login successful! Welcome ' + data.data.admin.username;
                         localStorage.setItem('adminToken', data.data.token);
-                        
-                        // Show admin info
-                        setTimeout(() => {
-                            alert('Login successful! Welcome ' + data.data.admin.username);
-                            console.log('Admin Token:', data.data.token);
-                            console.log('Admin Data:', data.data.admin);
-                        }, 500);
                     } else {
                         errorDiv.style.display = 'block';
                         errorDiv.textContent = data.message || 'Login failed';
@@ -228,39 +207,25 @@ app.get('/admin', (req, res) => {
 app.use((req, res) => {
   res.status(404).json({
     success: false,
-    message: 'Route not found',
+    message: 'Route not found'
   });
 });
 
 // Error handler
 app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err);
-  
-  if (err.type === 'entity.parse.failed') {
-    return res.status(400).json({
-      success: false,
-      message: 'Invalid JSON',
-    });
-  }
-
+  console.error('Error:', err);
   res.status(err.status || 500).json({
     success: false,
-    message: config.nodeEnv === 'production' ? 'Internal server error' : err.message,
+    message: process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message
   });
 });
 
-// IMPORTANT: This makes the server actually listen on a port
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`\n🚀 MovieStream Backend Server is running!`);
-  console.log(`📍 Local: http://localhost:${PORT}`);
-  console.log(`❤️  Health: http://localhost:${PORT}/api/health`);
-  console.log(`🔐 Admin: http://localhost:${PORT}/admin`);
-  console.log(`📡 API Test: http://localhost:${PORT}/api/test`);
-  console.log(`\n✨ Admin Login Credentials:`);
-  console.log(`   Username: superadmin`);
-  console.log(`   Password: Admin@123!`);
-  console.log(`\n✅ Ready to accept requests!\n`);
-});
+// Start server (for local development)
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
 
 module.exports = app;
