@@ -4,7 +4,7 @@ const AdminController = require('../controllers/adminController');
 const { authenticateAdmin } = require('../middleware/adminAuth');
 const { adminBruteForceProtection } = require('../middleware/security');
 
-// Admin login (with brute force protection) - NO AUTH REQUIRED
+// Admin login - NO AUTH REQUIRED
 router.post('/login', adminBruteForceProtection, AdminController.login);
 
 // All routes below require admin authentication
@@ -14,8 +14,8 @@ router.use(authenticateAdmin);
 router.get('/dashboard', AdminController.getDashboard);
 
 // Movie management
-router.post('/movies', AdminController.addMovie);
 router.get('/movies', AdminController.getMovies);
+router.post('/movies', AdminController.addMovie);
 router.put('/movies/:id', AdminController.updateMovie);
 router.delete('/movies/:id', AdminController.deleteMovie);
 
